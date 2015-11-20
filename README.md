@@ -1,4 +1,4 @@
-App Engine application for the Udacity training course.
+App Engine application for Field Worker Big Data based on Udacity training course. 
 
 ## Products
 - [App Engine][1]
