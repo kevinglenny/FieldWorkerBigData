@@ -166,11 +166,11 @@ conferenceApp.controllers.controller('CreateConferenceCtrl',
          * @returns {boolean} true if the argument is an integer, false otherwise.
          */
         $scope.isValidMaxAttendees = function () {
-            if (!$scope.conference.maxAttendees || $scope.conference.maxAttendees.length == 0) {
+            if (!$scope.conference.maxAttendees || $scope.conference.maxAttendees.length === 0) {
                 return true;
             }
             return /^[\d]+$/.test($scope.conference.maxAttendees) && $scope.conference.maxAttendees >= 0;
-        }
+        };
 
         /**
          * Tests if the conference.startDate and conference.endDate are valid.
@@ -184,7 +184,7 @@ conferenceApp.controllers.controller('CreateConferenceCtrl',
                 return true;
             }
             return $scope.conference.startDate <= $scope.conference.endDate;
-        }
+        };
 
         /**
          * Tests if $scope.conference is valid.
@@ -195,7 +195,7 @@ conferenceApp.controllers.controller('CreateConferenceCtrl',
             return !conferenceForm.$invalid &&
                 $scope.isValidMaxAttendees() &&
                 $scope.isValidDates();
-        }
+        };
 
         /**
          * Invokes the conference.createConference API.
@@ -265,7 +265,7 @@ conferenceApp.controllers.controller('ShowConferenceCtrl', function ($scope, $lo
         {enumValue: 'TOPIC', displayName: 'Topic'},
         {enumValue: 'MONTH', displayName: 'Start month'},
         {enumValue: 'MAX_ATTENDEES', displayName: 'Max Attendees'}
-    ]
+    ];
 
     /**
      * Possible operators.
@@ -371,7 +371,7 @@ conferenceApp.controllers.controller('ShowConferenceCtrl', function ($scope, $lo
      */
     $scope.pagination.isDisabled = function (event) {
         return angular.element(event.target).hasClass('disabled');
-    }
+    };
 
     /**
      * Adds a filter and set the default value.
@@ -381,7 +381,7 @@ conferenceApp.controllers.controller('ShowConferenceCtrl', function ($scope, $lo
             field: $scope.filtereableFields[0],
             operator: $scope.operators[0],
             value: ''
-        })
+        });
     };
 
     /**
@@ -423,7 +423,7 @@ conferenceApp.controllers.controller('ShowConferenceCtrl', function ($scope, $lo
     $scope.queryConferencesAll = function () {
         var sendFilters = {
             filters: []
-        }
+        };
         for (var i = 0; i < $scope.filters.length; i++) {
             var filter = $scope.filters[i];
             if (filter.field && filter.operator && filter.value) {
@@ -460,7 +460,7 @@ conferenceApp.controllers.controller('ShowConferenceCtrl', function ($scope, $lo
                     $scope.submitted = true;
                 });
             });
-    }
+    };
 
     /**
      * Invokes the conference.getConferencesCreated method.
@@ -561,8 +561,9 @@ conferenceApp.controllers.controller('ConferenceDetailCtrl', function ($scope, $
                 if (resp.error) {
                     // The request has failed.
                     var errorMessage = resp.error.message || '';
-                    $scope.messages = 'Failed to get the conference : ' + $routeParams.websafeKey
-                        + ' ' + errorMessage;
+                    $scope.messages = 'Failed to get the conference : ' + 
+                    $routeParams.websafeKey + ' ' + errorMessage;
+
                     $scope.alertStatus = 'warning';
                     $log.error($scope.messages);
                 } else {

@@ -58,7 +58,7 @@ app.filter('startFrom', function () {
      */
     var filter = function (data, start) {
         return data.slice(start);
-    }
+    };
     return filter;
 });
 
