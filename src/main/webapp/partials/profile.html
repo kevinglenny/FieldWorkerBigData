@@ -13,6 +13,7 @@
         <div class="col-md-8">
             <h3>My Profile</h3>
             <form name="profileForm" novalidate role="form">
+            
                 <div class="form-group" ng-class="{'has-warning': profile.displayName != initialProfile.displayName}">
                     <label for="displayName">Display Name </label>
                     <span class="label label-warning"
@@ -20,16 +21,7 @@
                     <input id="displayName" type="text" name="displayName" ng-model="profile.displayName"
                            class="form-control"/>
                 </div>
-
-                <div class="form-group" ng-class="{'has-warning': profile.teeShirtSize != initialProfile.teeShirtSize}">
-                    <label for="teeShirtSize">Tee shirt size</label>
-                    <span class="label label-warning"
-                          ng-show="profile.teeShirtSize != initialProfile.teeShirtSize"> Changed</span>
-                    <select id="teeShirtSize" ng-model="profile.teeShirtSize" name="teeShirtSize" ng-options="size for size in teeShirtSizes"
-                            class="form-control">
-                    </select>
-                </div>
-
+                
                 <button ng-click="saveProfile(profileForm)" class="btn btn-primary"
                         ng-disabled="loading">Update profile
                 </button>

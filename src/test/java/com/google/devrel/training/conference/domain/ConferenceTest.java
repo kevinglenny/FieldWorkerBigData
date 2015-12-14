@@ -6,6 +6,7 @@ import static org.junit.Assert.*;
 import com.google.appengine.tools.development.testing.LocalDatastoreServiceTestConfig;
 import com.google.appengine.tools.development.testing.LocalServiceTestHelper;
 import com.google.devrel.training.conference.form.ConferenceForm;
+import com.google.devrel.training.conference.form.JobForm;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -68,7 +69,7 @@ public class ConferenceTest {
 
     @Test(expected = NullPointerException.class)
     public void testNullName() throws Exception {
-        ConferenceForm nullConferenceForm = new ConferenceForm(null, DESCRIPTION, topics, CITY,
+    	ConferenceForm nullConferenceForm = new ConferenceForm(null, DESCRIPTION, topics, CITY,
                 startDate, endDate, CAP);
         new Conference(ID, ORGANIZER_USER_ID, nullConferenceForm);
     }
@@ -95,7 +96,7 @@ public class ConferenceTest {
     @Test
     public void testGetOrganizerDisplayName() throws Exception {
         String displayName = "Udacity Student";
-        Profile profile = new Profile(ORGANIZER_USER_ID, displayName, "", null);
+        Profile profile = new Profile(ORGANIZER_USER_ID, displayName, "");
         ofy().save().entity(profile).now();
         Conference conference = new Conference(ID, ORGANIZER_USER_ID, conferenceForm);
         assertEquals(displayName, conference.getOrganizerDisplayName());

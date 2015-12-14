@@ -16,20 +16,25 @@ import com.google.api.server.spi.response.ConflictException;
 import com.google.api.server.spi.response.ForbiddenException;
 import com.google.api.server.spi.response.NotFoundException;
 import com.google.api.server.spi.response.UnauthorizedException;
+import com.google.appengine.api.blobstore.BlobstoreService;
+import com.google.appengine.api.blobstore.BlobstoreServiceFactory;
 import com.google.appengine.api.memcache.MemcacheService;
 import com.google.appengine.api.memcache.MemcacheServiceFactory;
 import com.google.appengine.api.taskqueue.Queue;
 import com.google.appengine.api.taskqueue.QueueFactory;
 import com.google.appengine.api.taskqueue.TaskOptions;
 import com.google.appengine.api.users.User;
+import com.google.appengine.api.utils.SystemProperty;
 import com.google.devrel.training.conference.Constants;
 import com.google.devrel.training.conference.domain.Announcement;
 import com.google.devrel.training.conference.domain.Conference;
+import com.google.devrel.training.conference.domain.Job;
 import com.google.devrel.training.conference.domain.Profile;
+import com.google.devrel.training.conference.form.JobForm;
+import com.google.devrel.training.conference.form.JobQueryForm;
 import com.google.devrel.training.conference.form.ConferenceForm;
 import com.google.devrel.training.conference.form.ConferenceQueryForm;
 import com.google.devrel.training.conference.form.ProfileForm;
-import com.google.devrel.training.conference.form.ProfileForm.TeeShirtSize;
 import com.googlecode.objectify.Key;
 import com.googlecode.objectify.Work;
 import com.googlecode.objectify.cmd.Query;
@@ -43,7 +48,7 @@ import com.googlecode.objectify.cmd.Query;
         Constants.API_EXPLORER_CLIENT_ID },
         description = "API for the Conference Central Backend application.")
 public class ConferenceApi {
-
+	
     /*
      * Get the display name from the user's email. For example, if the email is
      * lemoncake@example.com, then the display name becomes "lemoncake."
@@ -92,7 +97,6 @@ public class ConferenceApi {
         // Get the displayName and teeShirtSize sent by the request.
 
         String displayName = profileForm.getDisplayName();
-        TeeShirtSize teeShirtSize = profileForm.getTeeShirtSize();
 
         // Get the Profile from the datastore if it exists
         // otherwise create a new one
@@ -106,15 +110,12 @@ public class ConferenceApi {
                 displayName = extractDefaultDisplayNameFromEmail(user
                         .getEmail());
             }
-            if (teeShirtSize == null) {
-                teeShirtSize = TeeShirtSize.NOT_SPECIFIED;
-            }
             // Now create a new Profile entity
-            profile = new Profile(userId, displayName, mainEmail, teeShirtSize);
+            profile = new Profile(userId, displayName, mainEmail);
         } else {
             // The Profile entity already exists
             // Update the Profile entity
-            profile.update(displayName, teeShirtSize);
+            profile.update(displayName);
         }
 
         // TODO 3
@@ -165,7 +166,7 @@ public class ConferenceApi {
             // Use default displayName and teeShirtSize
             String email = user.getEmail();
             profile = new Profile(user.getUserId(),
-                    extractDefaultDisplayNameFromEmail(email), email, TeeShirtSize.NOT_SPECIFIED);
+                    extractDefaultDisplayNameFromEmail(email), email);
         }
         return profile;
     }
@@ -196,7 +197,7 @@ public class ConferenceApi {
             @Override
             public Conference run() {
                 // Fetch user's Profile.
-                Profile profile = getProfileFromUser(user);
+            	Profile profile = getProfileFromUser(user);
                 Conference conference = new Conference(conferenceId, userId, conferenceForm);
                 // Save Conference and Profile.
                 ofy().save().entities(conference, profile).now();
@@ -557,5 +558,353 @@ public class ConferenceApi {
         }
         return null;
     }
+    
+    
+    /* JOB UPDATES */
+    
+    
+    /**
+     * Creates a Job object with the given Job and stores it to the datastore.
+     *
+     * @param user A user who invokes this method, null when the user is not signed in.
+     * @param jobForm A JobForm object representing user's inputs.
+     * @return Job Object just created. 
+     * @throws UnauthorizedException when the user is not signed in.
+     */
+    @ApiMethod(name = "createJob", path = "job", httpMethod = HttpMethod.POST)
+    public Job createJob(final User user, final JobForm jobForm)
+        throws UnauthorizedException {
+        if (user == null) {
+            throw new UnauthorizedException("Authorization required");
+        }
+        // Allocate Id first, in order to make the transaction idempotent.
+        final String userId = user.getUserId();
+        Key<Profile> profileKey = Key.create(Profile.class, userId);
+        final Key<Job> jobKey = factory().allocateId(profileKey, Job.class);
+        final long jobId = jobKey.getId();
+        final Queue queue = QueueFactory.getDefaultQueue();
 
+        // Start a transaction.
+        Job job = ofy().transact(new Work<Job>() {
+            @Override
+            public Job run() {
+                // Fetch user's Profile.
+            	Profile profile = getProfileFromUser(user);
+                Job job = new Job(jobId, userId, jobForm);
+                // Save Job and Profile.
+                ofy().save().entities(job, profile).now();
+                queue.add(ofy().getTransaction(),
+                        TaskOptions.Builder.withUrl("/tasks/send_confirmation_email")
+                        .param("email", profile.getMainEmail())
+                        .param("conferenceInfo", job.toString()));
+                return job;
+            }
+        });
+        return job;
+    }    
+    
+    /**
+     * Creates a Job object with the given Job and stores it to the datastore.
+     *
+     * @param user A user who invokes this method, null when the user is not signed in.
+     * @param jobForm A JobForm object representing user's inputs.
+     * @return Job Object just created. 
+     * @throws UnauthorizedException when the user is not signed in.
+     */
+    @ApiMethod(
+    		name = "updateJob", 
+    		path = "job/{websafeJobKey}/update", 
+    		httpMethod = HttpMethod.POST)
+    public Job updateJob(final User user,   		
+    		@Named("websafeJobKey") final String websafeJobKey, final JobForm jobForm)
+        throws UnauthorizedException, NotFoundException {
+        if (user == null) {
+            throw new UnauthorizedException("Authorization required");
+        }
+        
+        Job job = getJob(websafeJobKey);
+        job.updateWithJobForm(jobForm);
+
+        ofy().save().entity(job).now();
+        
+        return job;
+    }        
+    
+    /**
+     * Returns a list of Jobs that the user created.
+     * In order to receive the websafeConferenceKey via the JSON params, uses a POST method.
+     *
+     * @param user A user who invokes this method, null when the user is not signed in.
+     * @return a list of Jobs that the user created.
+     * @throws UnauthorizedException when the user is not signed in.
+     */
+    @ApiMethod(
+            name = "getJobsCreated",
+            path = "getJobsCreated",
+            httpMethod = HttpMethod.POST
+    )
+    public List<Job> getJobsCreated(final User user) throws UnauthorizedException {
+        // If not signed in, throw a 401 error.
+        if (user == null) {
+            throw new UnauthorizedException("Authorization required");
+        }
+        String userId = user.getUserId();
+        Key<Profile> userKey = Key.create(Profile.class, userId);
+        return ofy().load().type(Job.class)
+                .ancestor(userKey)
+                .order("name").list();
+    }    
+
+    /**
+     * Queries against the datastore with the given filters and returns the result.
+     *
+     * Normally this kind of method is supposed to get invoked by a GET HTTP method,
+     * but we do it with POST, in order to receive jobQueryForm Object via the POST body.
+     *
+     * @param jobQueryForm A form object representing the query.
+     * @return A List of Jobs that match the query.
+     */
+    @ApiMethod(
+            name = "queryJobs",
+            path = "queryJobs",
+            httpMethod = HttpMethod.POST
+    )
+    public List<Job> queryJobs(JobQueryForm jobQueryForm) {
+        Iterable<Job> jobIterable = jobQueryForm.getQuery();
+        List<Job> result = new ArrayList<>(0);
+        List<Key<Profile>> organizersKeyList = new ArrayList<>(0);
+        for (Job job : jobIterable) {
+            organizersKeyList.add(Key.create(Profile.class, job.getOwnerUserId()));
+            result.add(job);
+        }
+        // To avoid separate datastore gets for each Conference, pre-fetch the Profiles.
+        ofy().load().keys(organizersKeyList);
+        return result;
+    }    
+    
+    /**
+     * Returns a Job object with the given jobId.
+     *
+     * @param websafeConferenceKey The String representation of the Job Key.
+     * @return a Job object with the given jobId.
+     * @throws NotFoundException when there is no Job with the given jobId.
+     */
+    @ApiMethod(
+            name = "getJob",
+            path = "job/{websafeJobKey}",
+            httpMethod = HttpMethod.GET
+    )
+    public Job getJob(
+            @Named("websafeJobKey") final String websafeJobKey)
+            throws NotFoundException {
+        Key<Job> jobKey = Key.create(websafeJobKey);
+        Job job = ofy().load().key(jobKey).now();
+        if (job == null) {
+            throw new NotFoundException("No job found with key: " + websafeJobKey);
+        }
+        return job;
+    }    
+ 
+    /**
+     * Register for the specified Job.
+     *
+     * @param user An user who invokes this method, null when the user is not signed in.
+     * @param websafeJobKey The String representation of the Job Key.
+     * @return Boolean true when success, otherwise false
+     * @throws UnauthorizedException when the user is not signed in.
+     * @throws NotFoundException when there is no Job with the given jobsId.
+     */
+    @ApiMethod(
+            name = "registerForJob",
+            path = "job/{websafeJobKey}/registration",
+            httpMethod = HttpMethod.POST
+    )
+
+    public WrappedBoolean registerForJob(final User user,
+            @Named("websafeJobKey") final String websafeJobKey)
+            throws UnauthorizedException, NotFoundException,
+            ForbiddenException, ConflictException {
+        // If not signed in, throw a 401 error.
+        if (user == null) {
+            throw new UnauthorizedException("Authorization required");
+        }
+
+        // Get the userId
+        final String userId = user.getUserId();
+
+        WrappedBoolean result = ofy().transact(new Work<WrappedBoolean>() {
+            @Override
+            public WrappedBoolean run() {
+                try {
+
+                // Get the job key
+                // Will throw ForbiddenException if the key cannot be created
+                Key<Job> jobKey = Key.create(websafeJobKey);
+
+                // Get the Job entity from the datastore
+                Job job = ofy().load().key(jobKey).now();
+
+                // 404 when there is no Job with the given jobId.
+                if (job == null) {
+                    return new WrappedBoolean (false,
+                            "No Job found with key: "
+                                    + websafeJobKey);
+                }
+
+                // Get the user's Profile entity
+                Profile profile = getProfileFromUser(user);
+
+                // Is the user already working on this Job?
+                if (profile.getConferenceKeysToAttend().contains(
+                        websafeJobKey)) {
+                    return new WrappedBoolean (false, "Already working on this job");
+                } else {
+                    // All looks good, go ahead and assign the job
+                    profile.addToJobKeysToAttend(websafeJobKey);
+                    job.assign();
+
+                    // Save the Conference and Profile entities
+                    ofy().save().entities(profile, job).now();
+                    // We are assigned!
+                    return new WrappedBoolean(true, "Job assigned successfully");
+                }
+
+                }
+                catch (Exception e) {
+                    return new WrappedBoolean(false, "Unknown exception");
+
+                }
+            }
+        });
+        // if result is false
+        if (!result.getResult()) {
+            if (result.getReason().contains("No Job found with key")) {
+                throw new NotFoundException (result.getReason());
+            }
+            else if (result.getReason() == "Already assigned") {
+                throw new ConflictException("You are already assigned");
+            }
+            else {
+                throw new ForbiddenException("Unknown exception");
+            }
+        }
+        return result;
+    }
+
+
+    /**
+     * Unregister from the specified Job.
+     *
+     * @param user An user who invokes this method, null when the user is not signed in.
+     * @param websafeJobKey The String representation of the Job Key to unregister
+     *                             from.
+     * @return Boolean true when success, otherwise false.
+     * @throws UnauthorizedException when the user is not signed in.
+     * @throws NotFoundException when there is no Job with the given jobId.
+     */
+    @ApiMethod(
+            name = "unregisterFromJob",
+            path = "job/{websafeJobKey}/registration",
+            httpMethod = HttpMethod.DELETE
+    )
+    public WrappedBoolean unregisterFromJob(final User user,
+                                            @Named("websafeJobKey")
+                                            final String websafeJobKey)
+            throws UnauthorizedException, NotFoundException, ForbiddenException, ConflictException {
+        // If not signed in, throw a 401 error.
+        if (user == null) {
+            throw new UnauthorizedException("Authorization required");
+        }
+
+        WrappedBoolean result = ofy().transact(new Work<WrappedBoolean>() {
+            @Override
+            public WrappedBoolean run() {
+                Key<Job> jobKey = Key.create(websafeJobKey);
+                Job job = ofy().load().key(jobKey).now();
+                // 404 when there is no Job with the given jobId.
+                if (job == null) {
+                    return new  WrappedBoolean(false,
+                            "No Job found with key: " + websafeJobKey);
+                }
+
+                // Un-registering from the Job.
+                Profile profile = getProfileFromUser(user);
+                if (profile.getJobKeysToAttend().contains(websafeJobKey)) {
+                    profile.unregisterFromJob(websafeJobKey);
+                    job.giveBack();
+                    ofy().save().entities(profile, job).now();
+                    return new WrappedBoolean(true);
+                } else {
+                    return new WrappedBoolean(false, "You are not assinged for this job");
+                }
+            }
+        });
+        // if result is false
+        if (!result.getResult()) {
+            if (result.getReason().contains("No Job found with key")) {
+                throw new NotFoundException (result.getReason());
+            }
+            else {
+                throw new ForbiddenException(result.getReason());
+            }
+        }
+        // NotFoundException is actually thrown here.
+        return new WrappedBoolean(result.getResult());
+    }
+
+    /**
+     * Returns a collection of Job Object that the user is going to attend.
+     *
+     * @param user An user who invokes this method, null when the user is not signed in.
+     * @return a Collection of Jobs that the user is going to attend.
+     * @throws UnauthorizedException when the User object is null.
+     */
+    @ApiMethod(
+            name = "getJobsToAttend",
+            path = "getJobsToAttend",
+            httpMethod = HttpMethod.GET
+    )
+    public Collection<Job> getJobsToAttend(final User user)
+            throws UnauthorizedException, NotFoundException {
+        // If not signed in, throw a 401 error.
+        if (user == null) {
+            throw new UnauthorizedException("Authorization required");
+        }
+        Profile profile = ofy().load().key(Key.create(Profile.class, user.getUserId())).now();
+        if (profile == null) {
+            throw new NotFoundException("Profile doesn't exist.");
+        }
+        List<String> keyStringsToAttend = profile.getJobKeysToAttend();
+        List<Key<Job>> keysToAttend = new ArrayList<>();
+        for (String keyString : keyStringsToAttend) {
+            keysToAttend.add(Key.<Job>create(keyString));
+        }
+        return ofy().load().keys(keysToAttend).values();
+    }    
+
+   
+    
+    /*
+    @ApiMethod(
+            name = "getUploadUrl",
+            path = "getUploadUrl",
+            httpMethod = HttpMethod.POST
+    )  
+    public UploadUrl getUploadUrl() {
+    	System.out.println("IN API getUploadUrlg");
+		
+		String uploadUrl = blobstoreService.createUploadUrl("/api/photos");
+
+		if (SystemProperty.environment.value() == SystemProperty.Environment.Value.Development) {
+			String hostname = System.getProperty("development.hostname");
+
+			if (hostname != null) {
+				// modify the url to allow use with the development server
+				uploadUrl = uploadUrl.replace("localhost", hostname);
+			}
+		}
+		return new UploadUrl("\"" + uploadUrl + "\"", "\"" + "photohunt#uploadurl" + "\"");
+    }
+    */
+    
 }

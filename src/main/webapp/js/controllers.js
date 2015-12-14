@@ -26,6 +26,24 @@ conferenceApp.controllers = angular.module('conferenceControllers', ['ui.bootstr
  */
 conferenceApp.controllers.controller('MyProfileCtrl',
     function ($scope, $log, oauth2Provider, HTTP_ERRORS) {
+	
+	  $scope.userPhotos = [];	
+	  
+	  $scope.deletePhoto = function(photoId) {
+		    // PhotoHuntApi.deletePhoto(photoId);
+		    $scope.userPhotos = $scope.removePhotoFromArray($scope.userPhotos, photoId);
+		  }
+		  
+	  $scope.getUserPhotos = function() {
+		    if ($scope.hasUserProfile && ($scope.themes.length > 0)) {
+		      PhotoHuntApi.getUserPhotosByTheme($scope.selectedTheme.id)
+		      	  .then(function(response) {
+		        $scope.userPhotos = $scope.adaptPhotos(response.data);
+		      });
+		    }
+		  }
+	  
+	  
         $scope.submitted = false;
         $scope.loading = false;
 
@@ -34,20 +52,6 @@ conferenceApp.controllers.controller('MyProfileCtrl',
          * @type {{}}
          */
         $scope.initialProfile = {};
-
-        /**
-         * Candidates for the teeShirtSize select box.
-         * @type {string[]}
-         */
-        $scope.teeShirtSizes = [
-            'XS',
-            'S',
-            'M',
-            'L',
-            'XL',
-            'XXL',
-            'XXXL'
-        ];
 
         /**
          * Initializes the My profile page.
@@ -66,7 +70,6 @@ conferenceApp.controllers.controller('MyProfileCtrl',
                             } else {
                                 // Succeeded to get the user profile.
                                 $scope.profile.displayName = resp.result.displayName;
-                                $scope.profile.teeShirtSize = resp.result.teeShirtSize;
                                 $scope.initialProfile = resp.result;
                             }
                         });
@@ -110,7 +113,6 @@ conferenceApp.controllers.controller('MyProfileCtrl',
                             $scope.submitted = false;
                             $scope.initialProfile = {
                                 displayName: $scope.profile.displayName,
-                                teeShirtSize: $scope.profile.teeShirtSize
                             };
 
                             $log.info($scope.messages + JSON.stringify(resp.result));
@@ -166,11 +168,11 @@ conferenceApp.controllers.controller('CreateConferenceCtrl',
          * @returns {boolean} true if the argument is an integer, false otherwise.
          */
         $scope.isValidMaxAttendees = function () {
-            if (!$scope.conference.maxAttendees || $scope.conference.maxAttendees.length === 0) {
+            if (!$scope.conference.maxAttendees || $scope.conference.maxAttendees.length == 0) {
                 return true;
             }
             return /^[\d]+$/.test($scope.conference.maxAttendees) && $scope.conference.maxAttendees >= 0;
-        };
+        }
 
         /**
          * Tests if the conference.startDate and conference.endDate are valid.
@@ -184,7 +186,7 @@ conferenceApp.controllers.controller('CreateConferenceCtrl',
                 return true;
             }
             return $scope.conference.startDate <= $scope.conference.endDate;
-        };
+        }
 
         /**
          * Tests if $scope.conference is valid.
@@ -195,7 +197,7 @@ conferenceApp.controllers.controller('CreateConferenceCtrl',
             return !conferenceForm.$invalid &&
                 $scope.isValidMaxAttendees() &&
                 $scope.isValidDates();
-        };
+        }
 
         /**
          * Invokes the conference.createConference API.
@@ -236,6 +238,124 @@ conferenceApp.controllers.controller('CreateConferenceCtrl',
         };
     });
 
+
+/**
+ * @ngdoc controller
+ * @name CreateJobCtrl
+ *
+ * @description
+ * A controller used for the Create jobs page.
+ */
+conferenceApp.controllers.controller('CreateJobCtrl',
+    function ($scope, $log, oauth2Provider, HTTP_ERRORS, $http) {
+	
+	  // uploads
+	  $scope.uploadUrl;
+	  
+	   $scope.getUploadUrl = function(params) {
+	       $http.post("/api/images").success(function(data, status) {
+	           $scope.uploadUrl = data.replace(/['"]+/g, '');
+	           console.log($scope.uploadUrl);
+	       })
+	   }
+	  
+	  $scope.canUpload = function() {
+		    return true;
+		  }
+	  
+	  $scope.uploadedPhoto = function(uploadedPhoto) {
+		  console.log('uploadedPhoto called');
+		  uploadedPhoto['canDelete'] = true;
+		  $scope.userPhotos.unshift(uploadedPhoto);
+		    // $scope.allPhotos.unshift(uploadedPhoto);
+		    $scope.getUploadUrl();
+		  }	  
+	  
+        /**
+         * The job object being edited in the page.
+         * @type {{}|*}
+         */
+        $scope.job = $scope.job || {};
+
+        /**
+         * Holds the default values for the input candidates for statuses select.
+         * @type {string[]}
+         */
+        $scope.statuses = [
+            'Unassigned',
+            'Completed',
+            'On-Hold',
+            'Attention'
+        ];
+
+        /**
+         * Holds the default values for the input candidates for priorities select.
+         * @type {string[]}
+         */
+        $scope.priorities = [
+           'Urgent',
+           'Normal',
+           'Low'
+        ];
+        
+        /**
+         * Tests if the arugment is an integer and not negative.
+         * @returns {boolean} true if the argument is an integer, false otherwise.
+         */
+        $scope.isValidInvoiceCost = function () {
+            return $scope.job.invoiceCost > 0;
+        }
+
+
+        /**
+         * Tests if $scope.conference is valid.
+         * @param jobForm the form object from the create_jobs.html page.
+         * @returns {boolean|*} true if valid, false otherwise.
+         */
+        $scope.isValidJob = function (jobForm) {
+            return !jobForm.$invalid &&
+            $scope.isValidInvoiceCost();
+        }
+        
+        /**
+         * Invokes the conference.createJob API.
+         *
+         * @param jobForm the form object.
+         */
+        $scope.createJob = function (jobForm) {
+            if (!$scope.isValidJob(jobForm)) {
+                return;
+            }
+
+            $scope.loading = true;
+            gapi.client.conference.createJob($scope.job).
+                execute(function (resp) {
+                    $scope.$apply(function () {
+                        $scope.loading = false;
+                        if (resp.error) {
+                            // The request has failed.
+                            var errorMessage = resp.error.message || '';
+                            $scope.messages = 'Failed to create a job : ' + errorMessage;
+                            $scope.alertStatus = 'warning';
+                            $log.error($scope.messages + ' Job : ' + JSON.stringify($scope.job));
+
+                            if (resp.code && resp.code == HTTP_ERRORS.UNAUTHORIZED) {
+                                oauth2Provider.showLoginModal();
+                                return;
+                            }
+                        } else {
+                            // The request has succeeded.
+                            $scope.messages = 'The job has been created : ' + resp.result.name;
+                            $scope.alertStatus = 'success';
+                            $scope.submitted = false;
+                            $scope.job = {};
+                            $log.info($scope.messages + ' : ' + JSON.stringify(resp.result));
+                        }
+                    });
+                });
+        };
+    });
+
 /**
  * @ngdoc controller
  * @name ShowConferenceCtrl
@@ -265,7 +385,7 @@ conferenceApp.controllers.controller('ShowConferenceCtrl', function ($scope, $lo
         {enumValue: 'TOPIC', displayName: 'Topic'},
         {enumValue: 'MONTH', displayName: 'Start month'},
         {enumValue: 'MAX_ATTENDEES', displayName: 'Max Attendees'}
-    ];
+    ]
 
     /**
      * Possible operators.
@@ -371,7 +491,7 @@ conferenceApp.controllers.controller('ShowConferenceCtrl', function ($scope, $lo
      */
     $scope.pagination.isDisabled = function (event) {
         return angular.element(event.target).hasClass('disabled');
-    };
+    }
 
     /**
      * Adds a filter and set the default value.
@@ -381,7 +501,7 @@ conferenceApp.controllers.controller('ShowConferenceCtrl', function ($scope, $lo
             field: $scope.filtereableFields[0],
             operator: $scope.operators[0],
             value: ''
-        });
+        })
     };
 
     /**
@@ -423,7 +543,7 @@ conferenceApp.controllers.controller('ShowConferenceCtrl', function ($scope, $lo
     $scope.queryConferencesAll = function () {
         var sendFilters = {
             filters: []
-        };
+        }
         for (var i = 0; i < $scope.filters.length; i++) {
             var filter = $scope.filters[i];
             if (filter.field && filter.operator && filter.value) {
@@ -460,7 +580,7 @@ conferenceApp.controllers.controller('ShowConferenceCtrl', function ($scope, $lo
                     $scope.submitted = true;
                 });
             });
-    };
+    }
 
     /**
      * Invokes the conference.getConferencesCreated method.
@@ -536,6 +656,305 @@ conferenceApp.controllers.controller('ShowConferenceCtrl', function ($scope, $lo
 
 /**
  * @ngdoc controller
+ * @name ShowJobCtrl
+ *
+ * @description
+ * A controller used for the Show jobs page.
+ */
+conferenceApp.controllers.controller('ShowJobCtrl', function ($scope, $log, oauth2Provider, HTTP_ERRORS) {
+
+    /**
+     * Holds the status if the query is being executed.
+     * @type {boolean}
+     */
+    $scope.submitted = false;
+
+    $scope.selectedTab = 'ALL';
+
+    /**
+     * Holds the filters that will be applied when queryJobsAll is invoked.
+     * @type {Array}
+     */
+    $scope.filters = [
+    ];
+
+    $scope.filtereableFields = [
+        {enumValue: 'OWNER', displayName: 'Owner'},
+        {enumValue: 'DATE', displayName: 'Date'},
+        {enumValue: 'PRIORITY', displayName: 'Priority'},
+        {enumValue: 'STATUS', displayName: 'Status'},
+        {enumValue: 'INVOICE_COST', displayName: 'Cost'}
+    ]
+
+    /**
+     * Possible operators.
+     *
+     * @type {{displayName: string, enumValue: string}[]}
+     */
+    $scope.operators = [
+        {displayName: '=', enumValue: 'EQ'},
+        {displayName: '>', enumValue: 'GT'},
+        {displayName: '>=', enumValue: 'GTEQ'},
+        {displayName: '<', enumValue: 'LT'},
+        {displayName: '<=', enumValue: 'LTEQ'},
+        {displayName: '!=', enumValue: 'NE'}
+    ];
+
+    /**
+     * Holds the jobs currently displayed in the page.
+     * @type {Array}
+     */
+    $scope.jobs = [];
+
+    /**
+     * Holds the state if offcanvas is enabled.
+     *
+     * @type {boolean}
+     */
+    $scope.isOffcanvasEnabled = false;
+
+    /**
+     * Sets the selected tab to 'ALL'
+     */
+    $scope.tabAllSelected = function () {
+        $scope.selectedTab = 'ALL';
+        $scope.queryJobs();
+    };
+
+    /**
+     * Sets the selected tab to 'YOU_HAVE_CREATED'
+     */
+    $scope.tabYouHaveCreatedSelected = function () {
+        $scope.selectedTab = 'YOU_HAVE_CREATED';
+        if (!oauth2Provider.signedIn) {
+            oauth2Provider.showLoginModal();
+            return;
+        }
+        $scope.queryJobs();
+    };
+
+    /**
+     * Sets the selected tab to 'YOU_WILL_ATTEND'
+     */
+    $scope.tabYouWillAttendSelected = function () {
+        $scope.selectedTab = 'YOU_WILL_ATTEND';
+        if (!oauth2Provider.signedIn) {
+            oauth2Provider.showLoginModal();
+            return;
+        }
+        $scope.queryJobs();
+    };    
+    
+    /**
+     * Toggles the status of the offcanvas.
+     */
+    $scope.toggleOffcanvas = function () {
+        $scope.isOffcanvasEnabled = !$scope.isOffcanvasEnabled;
+    };
+
+    /**
+     * Namespace for the pagination.
+     * @type {{}|*}
+     */
+    $scope.pagination = $scope.pagination || {};
+    $scope.pagination.currentPage = 0;
+    $scope.pagination.pageSize = 20;
+    /**
+     * Returns the number of the pages in the pagination.
+     *
+     * @returns {number}
+     */
+    $scope.pagination.numberOfPages = function () {
+        return Math.ceil($scope.jobs.length / $scope.pagination.pageSize);
+    };
+
+    /**
+     * Returns an array including the numbers from 1 to the number of the pages.
+     *
+     * @returns {Array}
+     */
+    $scope.pagination.pageArray = function () {
+        var pages = [];
+        var numberOfPages = $scope.pagination.numberOfPages();
+        for (var i = 0; i < numberOfPages; i++) {
+            pages.push(i);
+        }
+        return pages;
+    };
+
+    /**
+     * Checks if the target element that invokes the click event has the "disabled" class.
+     *
+     * @param event the click event
+     * @returns {boolean} if the target element that has been clicked has the "disabled" class.
+     */
+    $scope.pagination.isDisabled = function (event) {
+        return angular.element(event.target).hasClass('disabled');
+    }
+
+    /**
+     * Adds a filter and set the default value.
+     */
+    $scope.addFilter = function () {
+        $scope.filters.push({
+            field: $scope.filtereableFields[0],
+            operator: $scope.operators[0],
+            value: ''
+        })
+    };
+
+    /**
+     * Clears all filters.
+     */
+    $scope.clearFilters = function () {
+        $scope.filters = [];
+    };
+
+    /**
+     * Removes the filter specified by the index from $scope.filters.
+     *
+     * @param index
+     */
+    $scope.removeFilter = function (index) {
+        if ($scope.filters[index]) {
+            $scope.filters.splice(index, 1);
+        }
+    };
+
+    /**
+     * Query the conferences depending on the tab currently selected.
+     *
+     */
+    $scope.queryJobs = function () {
+        $scope.submitted = false;
+        if ($scope.selectedTab == 'ALL') {
+            $scope.queryJobsAll();
+        } else if ($scope.selectedTab == 'YOU_HAVE_CREATED') {
+            $scope.getJobsCreated();
+        } else if ($scope.selectedTab == 'YOU_WILL_ATTEND') {
+            $scope.getJobsAttend();
+        }
+    };
+    
+    /**
+     * Invokes the conference.queryJobs API.
+     */
+    $scope.queryJobsAll = function () {
+        var sendFilters = {
+            filters: []
+        }
+        for (var i = 0; i < $scope.filters.length; i++) {
+            var filter = $scope.filters[i];
+            if (filter.field && filter.operator && filter.value) {
+                sendFilters.filters.push({
+                    field: filter.field.enumValue,
+                    operator: filter.operator.enumValue,
+                    value: filter.value
+                });
+            }
+        }
+        $scope.loading = true;
+        gapi.client.conference.queryJobs(sendFilters).
+            execute(function (resp) {
+                $scope.$apply(function () {
+                    $scope.loading = false;
+                    if (resp.error) {
+                        // The request has failed.
+                        var errorMessage = resp.error.message || '';
+                        $scope.messages = 'Failed to query jobs : ' + errorMessage;
+                        $scope.alertStatus = 'warning';
+                        $log.error($scope.messages + ' filters : ' + JSON.stringify(sendFilters));
+                    } else {
+                        // The request has succeeded.
+                        $scope.submitted = false;
+                        $scope.messages = 'Query succeeded : ' + JSON.stringify(sendFilters);
+                        $scope.alertStatus = 'success';
+                        $log.info($scope.messages);
+
+                        $scope.jobs = [];
+                        angular.forEach(resp.items, function (job) {
+                            $scope.jobs.push(job);
+                        });
+                    }
+                    $scope.submitted = true;
+                });
+            });
+    }
+
+    /**
+     * Invokes the conference.getJobsCreated method.
+     */
+    $scope.getJobsCreated = function () {
+        $scope.loading = true;
+        gapi.client.conference.getJobsCreated().
+            execute(function (resp) {
+                $scope.$apply(function () {
+                    $scope.loading = false;
+                    if (resp.error) {
+                        // The request has failed.
+                        var errorMessage = resp.error.message || '';
+                        $scope.messages = 'Failed to query the jobs created : ' + errorMessage;
+                        $scope.alertStatus = 'warning';
+                        $log.error($scope.messages);
+
+                        if (resp.code && resp.code == HTTP_ERRORS.UNAUTHORIZED) {
+                            oauth2Provider.showLoginModal();
+                            return;
+                        }
+                    } else {
+                        // The request has succeeded.
+                        $scope.submitted = false;
+                        $scope.messages = 'Query succeeded : Jobs you have created';
+                        $scope.alertStatus = 'success';
+                        $log.info($scope.messages);
+
+                        $scope.jobs = [];
+                        angular.forEach(resp.items, function (job) {
+                            $scope.jobs.push(job);
+                        });
+                    }
+                    $scope.submitted = true;
+                });
+            });
+    };
+    
+    /**
+     * Retrieves the jobs to attend by calling the job.getProfile method and
+     * invokes the job.getJob method n times where n == the number of the jobs to attend.
+     */
+    $scope.getJobsAttend = function () {
+        $scope.loading = true;
+        gapi.client.conference.getJobsToAttend().
+            execute(function (resp) {
+                $scope.$apply(function () {
+                    if (resp.error) {
+                        // The request has failed.
+                        var errorMessage = resp.error.message || '';
+                        $scope.messages = 'Failed to query the jobs to attend : ' + errorMessage;
+                        $scope.alertStatus = 'warning';
+                        $log.error($scope.messages);
+
+                        if (resp.code && resp.code == HTTP_ERRORS.UNAUTHORIZED) {
+                            oauth2Provider.showLoginModal();
+                            return;
+                        }
+                    } else {
+                        // The request has succeeded.
+                        $scope.conferences = resp.result.items;
+                        $scope.loading = false;
+                        $scope.messages = 'Query succeeded : Jobs you will attend (or you have attended)';
+                        $scope.alertStatus = 'success';
+                        $log.info($scope.messages);
+                    }
+                    $scope.submitted = true;
+                });
+            });
+    };    
+});
+
+
+/**
+ * @ngdoc controller
  * @name ConferenceDetailCtrl
  *
  * @description
@@ -561,9 +980,8 @@ conferenceApp.controllers.controller('ConferenceDetailCtrl', function ($scope, $
                 if (resp.error) {
                     // The request has failed.
                     var errorMessage = resp.error.message || '';
-                    $scope.messages = 'Failed to get the conference : ' + 
-                    $routeParams.websafeKey + ' ' + errorMessage;
-
+                    $scope.messages = 'Failed to get the conference : ' + $routeParams.websafeKey
+                        + ' ' + errorMessage;
                     $scope.alertStatus = 'warning';
                     $log.error($scope.messages);
                 } else {
@@ -595,7 +1013,6 @@ conferenceApp.controllers.controller('ConferenceDetailCtrl', function ($scope, $
             });
         });
     };
-
 
     /**
      * Invokes the conference.registerForConference method.
@@ -829,4 +1246,194 @@ conferenceApp.controllers.controller('DatepickerCtrl', function ($scope) {
 
     $scope.formats = ['dd-MMMM-yyyy', 'yyyy/MM/dd', 'shortDate'];
     $scope.format = $scope.formats[0];
+});
+
+
+/**
+ * @ngdoc controller
+ * @name JobDetailCtrl
+ *
+ * @description
+ * A controller used for the job detail page.
+ */
+conferenceApp.controllers.controller('JobDetailCtrl', function ($scope, $log, $routeParams, HTTP_ERRORS) {
+    
+    /**
+     * The initial job retrieved from the server to know the dirty state.
+     * @type {{}}
+     */
+    $scope.initialJob = {}
+	
+	$scope.job = {};
+
+    $scope.isUserAttending = false;
+    
+    $scope.canUpload = function () {
+    	return true;
+    }
+
+    /**
+     * Initializes the job detail page.
+     * Invokes the conference.getJob method and sets the returned job in the $scope.
+     *
+     */
+    $scope.init = function () {
+        $scope.loading = true;
+        gapi.client.conference.getJob({
+            websafeJobKey: $routeParams.websafeJobKey
+        }).execute(function (resp) {
+            $scope.$apply(function () {
+                $scope.loading = false;
+                if (resp.error) {
+                    // The request has failed.
+                    var errorMessage = resp.error.message || '';
+                    $scope.messages = 'Failed to get the job : ' + $routeParams.websafeKey
+                        + ' ' + errorMessage;
+                    $scope.alertStatus = 'warning';
+                    $log.error($scope.messages);
+                } else {
+                    // The request has succeeded.
+                    $scope.alertStatus = 'success';
+
+                    // Succeeded to get the user profile.
+                    $scope.job.description = resp.result.description;
+                    $scope.job.name = resp.result.name;
+
+                    
+                    $scope.initialJob = resp.result;   
+                }
+            });
+        });
+
+        $scope.loading = true;
+        // If the user is attending the job, updates the status message and available function.
+        gapi.client.conference.getProfile().execute(function (resp) {
+            $scope.$apply(function () {
+                $scope.loading = false;
+                if (resp.error) {
+                    // Failed to get a user profile.
+                } else {
+                    var profile = resp.result;
+                    for (var i = 0; i < profile.jobKeysToAttend.length; i++) {
+                        if ($routeParams.websafeJobKey == profile.jobKeysToAttend[i]) {
+                            // The user is assigned the job.
+                            $scope.alertStatus = 'info';
+                            $scope.messages = 'You are assigned this job';
+                            $scope.isUserAttending = true;
+                        }
+                    }
+                }
+            });
+        });
+    };
+
+    /**
+     * Invokes the conference.registerForJob method.
+     */
+    $scope.registerForJob = function () {
+        $scope.loading = true;
+        gapi.client.conference.registerForJob({
+            websafeJobKey: $routeParams.websafeJobKey
+        }).execute(function (resp) {
+            $scope.$apply(function () {
+                $scope.loading = false;
+                if (resp.error) {
+                    // The request has failed.
+                    var errorMessage = resp.error.message || '';
+                    $scope.messages = 'Failed to register for the job : ' + errorMessage;
+                    $scope.alertStatus = 'warning';
+                    $log.error($scope.messages);
+
+                    if (resp.code && resp.code == HTTP_ERRORS.UNAUTHORIZED) {
+                        oauth2Provider.showLoginModal();
+                        return;
+                    }
+                } else {
+                    if (resp.result) {
+                        // Register succeeded.
+                        $scope.messages = 'Registered for the job';
+                        $scope.alertStatus = 'success';
+                        $scope.isUserAttending = true;
+                    } else {
+                        $scope.messages = 'Failed to register for the job';
+                        $scope.alertStatus = 'warning';
+                    }
+                }
+            });
+        });
+    };
+    
+    /**
+     * Invokes the conference.updateJob API.
+     *
+     * @param jobForm the form object.
+     */
+    $scope.updateJob = function (jobForm) {
+        $scope.loading = true;
+        gapi.client.conference.updateJob({websafeJobKey: $routeParams.websafeJobKey}, $scope.job).
+            execute(function (resp) {
+                $scope.$apply(function () {
+                    $scope.loading = false;
+                    if (resp.error) {
+                        // The request has failed.
+                        var errorMessage = resp.error.message || '';
+                        $scope.messages = 'Failed to update the job : ' + errorMessage;
+                        $scope.alertStatus = 'warning';
+                        $log.error($scope.messages + ' Job : ' + JSON.stringify($scope.job));
+
+                        if (resp.code && resp.code == HTTP_ERRORS.UNAUTHORIZED) {
+                            oauth2Provider.showLoginModal();
+                            return;
+                        }
+                    } else {
+                        // The request has succeeded.
+                        $scope.messages = 'The job has been updated : ' + resp.result.name;
+                        $scope.alertStatus = 'success';
+                        $scope.submitted = false;
+                        $scope.job = {};
+                        $log.info($scope.messages + ' : ' + JSON.stringify(resp.result));
+                    }
+                });
+            });
+    };
+    
+    /**
+     * Invokes the conference.unregisterForJob method.
+     */
+    $scope.unregisterFromJob = function () {
+        $scope.loading = true;
+        gapi.client.conference.unregisterFromJob({
+            websafeJobKey: $routeParams.websafeJobKey
+        }).execute(function (resp) {
+            $scope.$apply(function () {
+                $scope.loading = false;
+                if (resp.error) {
+                    // The request has failed.
+                    var errorMessage = resp.error.message || '';
+                    $scope.messages = 'Failed to unregister from the job : ' + errorMessage;
+                    $scope.alertStatus = 'warning';
+                    $log.error($scope.messages);
+                    if (resp.code && resp.code == HTTP_ERRORS.UNAUTHORIZED) {
+                        oauth2Provider.showLoginModal();
+                        return;
+                    }
+                } else {
+                    if (resp.result) {
+                        // Unregister succeeded.
+                        $scope.messages = 'Unregistered from the job';
+                        $scope.alertStatus = 'success';
+                        $scope.isUserAttending = false;
+                        $log.info($scope.messages);
+                    } else {
+                        var errorMessage = resp.error.message || '';
+                        $scope.messages = 'Failed to unregister from the job : ' + $routeParams.websafeKey +
+                            ' : ' + errorMessage;
+                        $scope.messages = 'Failed to unregister from the job';
+                        $scope.alertStatus = 'warning';
+                        $log.error($scope.messages);
+                    }
+                }
+            });
+        });
+    };
 });

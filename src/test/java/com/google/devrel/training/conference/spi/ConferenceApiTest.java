@@ -7,11 +7,12 @@ import com.google.api.server.spi.response.UnauthorizedException;
 import com.google.appengine.api.users.User;
 import com.google.appengine.tools.development.testing.LocalDatastoreServiceTestConfig;
 import com.google.appengine.tools.development.testing.LocalServiceTestHelper;
+import com.google.devrel.training.conference.domain.Job;
 // import com.google.devrel.training.conference.domain.Conference;
 import com.google.devrel.training.conference.domain.Profile;
+import com.google.devrel.training.conference.form.JobForm;
 // import com.google.devrel.training.conference.form.ConferenceForm;
 import com.google.devrel.training.conference.form.ProfileForm;
-import com.google.devrel.training.conference.form.ProfileForm.TeeShirtSize;
 import com.googlecode.objectify.Key;
 
 import org.junit.After;
@@ -32,8 +33,6 @@ public class ConferenceApiTest {
     private static final String EMAIL = "example@gmail.com";
 
     private static final String USER_ID = "123456789";
-
-    private static final TeeShirtSize TEE_SHIRT_SIZE = TeeShirtSize.NOT_SPECIFIED;
 
     private static final String DISPLAY_NAME = "Your Name Here";
 
@@ -85,86 +84,76 @@ public class ConferenceApiTest {
     public void testSaveProfile() throws Exception {
         // Save the profile for the first time.
         Profile profile = conferenceApi.saveProfile(
-                user, new ProfileForm(DISPLAY_NAME, TEE_SHIRT_SIZE));
+                user, new ProfileForm(DISPLAY_NAME));
         // Check the return value first.
         assertEquals(USER_ID, profile.getUserId());
         assertEquals(EMAIL, profile.getMainEmail());
-        assertEquals(TEE_SHIRT_SIZE, profile.getTeeShirtSize());
         assertEquals(DISPLAY_NAME, profile.getDisplayName());
         // Fetch the Profile via Objectify.
         profile = ofy().load().key(Key.create(Profile.class, user.getUserId())).now();
         assertEquals(USER_ID, profile.getUserId());
         assertEquals(EMAIL, profile.getMainEmail());
-        assertEquals(TEE_SHIRT_SIZE, profile.getTeeShirtSize());
         assertEquals(DISPLAY_NAME, profile.getDisplayName());
     }
 
     @Test
     public void testSaveProfileWithNull() throws Exception {
         // Save the profile for the first time with null values.
-        Profile profile = conferenceApi.saveProfile(user, new ProfileForm(null, null));
+        Profile profile = conferenceApi.saveProfile(user, new ProfileForm(null));
         String displayName = EMAIL.substring(0, EMAIL.indexOf("@"));
         // Check the return value first.
         assertEquals(USER_ID, profile.getUserId());
         assertEquals(EMAIL, profile.getMainEmail());
-        assertEquals(TEE_SHIRT_SIZE, profile.getTeeShirtSize());
         assertEquals(displayName, profile.getDisplayName());
         // Fetch the Profile via Objectify.
         profile = ofy().load().key(Key.create(Profile.class, user.getUserId())).now();
         assertEquals(USER_ID, profile.getUserId());
         assertEquals(EMAIL, profile.getMainEmail());
-        assertEquals(TEE_SHIRT_SIZE, profile.getTeeShirtSize());
         assertEquals(displayName, profile.getDisplayName());
     }
 
     @Test
     public void testGetProfile() throws Exception {
-        conferenceApi.saveProfile(user, new ProfileForm(DISPLAY_NAME, TEE_SHIRT_SIZE));
+        conferenceApi.saveProfile(user, new ProfileForm(DISPLAY_NAME));
         // Fetch the Profile via the API.
         Profile profile = conferenceApi.getProfile(user);
         assertEquals(USER_ID, profile.getUserId());
         assertEquals(EMAIL, profile.getMainEmail());
-        assertEquals(TEE_SHIRT_SIZE, profile.getTeeShirtSize());
         assertEquals(DISPLAY_NAME, profile.getDisplayName());
     }
 
     @Test
     public void testUpdateProfile() throws Exception {
         // Save for the first time.
-        conferenceApi.saveProfile(user, new ProfileForm(DISPLAY_NAME, TEE_SHIRT_SIZE));
+        conferenceApi.saveProfile(user, new ProfileForm(DISPLAY_NAME));
         Profile profile = ofy().load().key(Key.create(Profile.class, user.getUserId())).now();
         assertEquals(USER_ID, profile.getUserId());
         assertEquals(EMAIL, profile.getMainEmail());
-        assertEquals(TEE_SHIRT_SIZE, profile.getTeeShirtSize());
         assertEquals(DISPLAY_NAME, profile.getDisplayName());
         // Then try to update it.
         String newDisplayName = "New Name";
-        TeeShirtSize newTeeShirtSize = TeeShirtSize.L;
-        conferenceApi.saveProfile(user, new ProfileForm(newDisplayName, newTeeShirtSize));
+        conferenceApi.saveProfile(user, new ProfileForm(newDisplayName));
         profile = ofy().load().key(Key.create(Profile.class, user.getUserId())).now();
         assertEquals(USER_ID, profile.getUserId());
         assertEquals(EMAIL, profile.getMainEmail());
-        assertEquals(newTeeShirtSize, profile.getTeeShirtSize());
         assertEquals(newDisplayName, profile.getDisplayName());
     }
 
     @Test
     public void testUpdateProfileWithNulls() throws Exception {
-        conferenceApi.saveProfile(user, new ProfileForm(DISPLAY_NAME, TEE_SHIRT_SIZE));
+        conferenceApi.saveProfile(user, new ProfileForm(DISPLAY_NAME));
         // Update the Profile with null values.
-        Profile profile = conferenceApi.saveProfile(user, new ProfileForm(null, null));
+        Profile profile = conferenceApi.saveProfile(user, new ProfileForm(null));
         // Expected behavior is that the existing properties do not get overwritten
 
         // Check the return value first.
         assertEquals(USER_ID, profile.getUserId());
         assertEquals(EMAIL, profile.getMainEmail());
-        assertEquals(TEE_SHIRT_SIZE, profile.getTeeShirtSize());
         assertEquals(DISPLAY_NAME, profile.getDisplayName());
         // Fetch the Profile via Objectify.
         profile = ofy().load().key(Key.create(Profile.class, user.getUserId())).now();
         assertEquals(USER_ID, profile.getUserId());
         assertEquals(EMAIL, profile.getMainEmail());
-        assertEquals(TEE_SHIRT_SIZE, profile.getTeeShirtSize());
         assertEquals(DISPLAY_NAME, profile.getDisplayName());
     }
 
@@ -288,4 +277,32 @@ public class ConferenceApiTest {
                 profile.getConferenceKeysToAttend().contains(conference.getWebsafeKey()));
     }
     */
+    
+    @Test
+    public void testRegistrations() throws Exception {
+        DateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy");
+        Date date = dateFormat.parse("03/25/2014");
+        JobForm jobForm = new JobForm(NAME, DESCRIPTION, "", "", "Unassigned", "Low", date, 0.0); 
+
+        Job job = conferenceApi.createJob(user, jobForm);
+        Long jobId = job.getId();
+
+        // Registration
+        Boolean result = conferenceApi.registerForJob(
+                user, job.getWebsafeKey()).getResult();
+        job = conferenceApi.getJob(job.getWebsafeKey());
+        Profile profile = ofy().load().key(Key.create(Profile.class, user.getUserId())).now();
+        assertTrue("registerForConference should succeed.", result);
+        assertTrue("Profile should have the conferenceId in conferenceIdsToAttend.",
+                profile.getJobKeysToAttend().contains(job.getWebsafeKey()));
+
+        // Unregister
+        result = conferenceApi.unregisterFromJob(
+                user, job.getWebsafeKey()).getResult();
+        job = conferenceApi.getJob(job.getWebsafeKey());
+        profile = ofy().load().key(Key.create(Profile.class, user.getUserId())).now();
+        assertTrue("unregisterFromConference should succeed.", result);
+        assertFalse("Profile shouldn't have the conferenceId in conferenceIdsToAttend.",
+                profile.getJobKeysToAttend().contains(job.getWebsafeKey()));
+    }    
 }

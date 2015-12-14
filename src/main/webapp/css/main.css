@@ -104,3 +104,16 @@ ul#conferences-list {
 .section-a {
     padding: 50px 0;
 }
+
+/* File upload updates */
+#uploadContainer {
+  background: #fff;
+  padding-bottom: 10px;
+}
+
+.copy-upload {
+	color: #666
+}
+.copy-drag {
+	font-size:14px
+}

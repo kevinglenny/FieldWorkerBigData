@@ -1,0 +1,107 @@
+package com.google.devrel.training.conference.domain;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSerializationContext;
+import com.google.gson.JsonSerializer;
+
+import lombok.NoArgsConstructor;
+
+import java.io.Reader;
+import java.lang.reflect.Type;
+import java.util.Date;
+
+/**
+ * Adds JSON serialization and deserialization to a class.  Uses Gson as the
+ * underlying serialization mechanism.  Also adds java.util.Date serialization
+ * and deserialization.
+ *
+ * @author vicfryzel@google.com (Vic Fryzel)
+ * @author cartland@google.com (Chris Cartland)
+ */
+@NoArgsConstructor
+public abstract class Jsonifiable {
+  
+	public static String kind = "conferenceApp#jsonifiable";
+
+  /**
+   * JSON serializer for java.util.Date, required when serializing larger
+   * objects containing Date members.
+   */
+  public static final JsonSerializer<Date> DATE_SERIALIZER
+  = new JsonSerializer<Date>() {
+    @Override
+    public JsonElement serialize(Date src, Type typeOfSrc,
+        JsonSerializationContext context) {
+      try {
+        return new JsonPrimitive(src.getTime());
+      } catch (NullPointerException e) {
+        return null;
+      }
+    }
+  };
+
+  /**
+   * JSON deserializer for java.util.Date, required when deserializing larger
+   * objects containing Date members.
+   */
+  public static final JsonDeserializer<Date> DATE_DESERIALIZER
+  = new JsonDeserializer<Date>() {
+    @Override
+    public Date deserialize(JsonElement json, Type typeOfT,
+        JsonDeserializationContext context) throws JsonParseException {
+      try {
+        return new Date(json.getAsLong());
+      } catch (NullPointerException e) {
+        return null;
+      }
+    }
+  };
+
+  /**
+   * Gson object to use in all serialization and deserialization.
+   */
+  public static final Gson GSON = new GsonBuilder()
+      .excludeFieldsWithoutExposeAnnotation()
+      .registerTypeAdapter(Date.class, Jsonifiable.DATE_SERIALIZER)
+      .registerTypeAdapter(Date.class, Jsonifiable.DATE_DESERIALIZER)
+      .create();
+
+  /**
+   * @param json Object to convert to instance representation.
+   * @param clazz Type to which object should be converted.
+   * @return Instance representation of the given JSON object.
+   */
+  public static <T> T fromJson(String json, Class<T> clazz) {
+    return GSON.fromJson(json, clazz);
+  }
+
+  /**
+   * @param reader Reader from which to read JSON string.
+   * @param clazz Type to which object should be converted.
+   * @return Instance representation of the given JSON object.
+   */
+  public static <T> T fromJson(Reader reader, Class<T> clazz) {
+    return GSON.fromJson(reader, clazz);
+  }
+
+  /**
+   * @return JSON representation of this instance.
+   */
+  public String toJson() {
+    return GSON.toJson(this);
+  }
+
+  /**
+   * @return this.toJson()
+   */
+  @Override
+  public String toString() {
+    return toJson();
+  }
+}

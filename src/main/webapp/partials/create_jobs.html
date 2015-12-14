@@ -1,0 +1,108 @@
+<div ng-controller="CreateJobCtrl">
+    <div class="row">
+        <div class="col-lg-12">
+            <div id="messages" class="alert alert-{{alertStatus}}" ng-show="messages">
+                <span ng-bind="messages"></span>
+                <i class="dismiss-messages pull-right glyphicon glyphicon-remove" ng-click="messages = ''"
+                   ng-show="messages"></i>
+            </div>
+            <img class="spinner" src="/img/ajax-loader.gif" ng-show="loading"/>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-8">
+            <h3>Create a job</h3>
+
+            <form name="jobForm" novalidate role="form">
+                <div class="form-group">
+                    <label for="name">Name <span class="required">*</span></label>
+                    <span class="label label-danger"
+                        ng-show="jobForm.name.$error.required">Required!</span>
+                    <input id="name" type="text" name="name" ng-model="job.name" class="form-control"
+                           ng-required="true"/>
+                </div>
+                
+                <div class="form-group">
+                    <label for="status">Status</label>
+                    <select id="status" ng-model="job.status" name="status" ng-options="status for status in statuses"
+                            class="form-control">
+                    </select>
+                </div>                
+
+                <div class="form-group">
+                    <label for="priority">Priority</label>
+                    <select id="priority" ng-model="job.priority" name="priority" ng-options="priority for priority in priorities"
+                            class="form-control">
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" type="text" name="description" ng-model="job.description"
+                              class="form-control"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="firstLineAddress">First line address</label>
+                    <textarea id="firstLineAddress" type="text" name="firstLineAddress" ng-model="job.firstLineAddress"
+                              class="form-control"></textarea>
+                </div>                
+
+                <div class="form-group">
+                    <label for="postCode">Post code</label>
+                    <textarea id="postCode" type="text" name="postCode" ng-model="job.postCode"
+                              class="form-control"></textarea>
+                </div>     
+
+                <div class="form-group" ng-controller="DatepickerCtrl">
+                    <label for="date">Date</label>
+                    <p class="input-group">
+                        <input id="date" type="text" class="form-control" datepicker-popup="{{format}}"
+                               ng-model="job.date" is-open="opened"
+                               datepicker-options="dateOptions"
+                               close-text="Close"/>
+                    <span class="input-group-btn">
+                        <button class="btn btn-default" ng-click="open($event)"><i
+                                class="glyphicon glyphicon-calendar"></i>
+                        </button>
+                    </span>
+                    </p>
+                </div>
+
+                <div class="form-group">
+                    <label for="invoiceCost">Invoice Cost £</label>
+                    <span class="label label-danger"
+                        ng-show="!isValidInvoiceCost()">Must be a double</span>
+                    <!-- The input type is text as the job.invoiceCost will be undefined,
+                    hence isValidInvoiceCost will be true when input type is double -->
+                    <input id="invoiceCost" type="text" name="invoiceCost" ng-model="job.invoiceCost"
+                           class="form-control"/>
+                </div>
+
+				<div class="form-group">
+				    <div class="row">
+				        <div class="col-lg-5 col-sm-6">
+				      <h3>My Photos</h3>
+				      <div id="uploadContainer" ng-show="canUpload()">
+				        <button upload-box
+				            upload-url="uploadUrl"
+				            on-complete="uploadedPhoto(photo)"
+				            id="upload">
+				        </button>
+				        </div>
+				          <ul id="myPhotos" ng-show="userPhotos.length">
+        					<li ng-repeat="photo in userPhotos|orderBy:ordering">
+         					 <photo item="photo" delete-photo="deletePhoto(photoId)"></photo>
+       					    </li>
+      					</ul>
+				    </div>
+					</div>
+				</div>    
+
+                <button ng-click="createJob(jobForm)" class="btn btn-primary"
+                        ng-disabled="!isValidJob(jobForm) || loading">Create
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
